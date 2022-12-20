@@ -2,18 +2,17 @@
 pragma solidity ^0.8.13;
 
 import "openzeppelin-contracts/token/ERC721/ERC721.sol";
-import "openzeppelin-contracts/token/ERC721/IERC721.sol";
 import "openzeppelin-contracts/token/ERC721/IERC721Receiver.sol";
 import "openzeppelin-contracts/proxy/utils/Initializable.sol";
 
 import "solady/utils/LibBitmap.sol";
 
 contract WhiteWhale is Initializable, ERC721, IERC721Receiver {
-    // Token name
-    string name;
+    // Token tokenName
+    string tokenName;
 
-    // Token symbol
-    string symbol;
+    // Token tokenSymbol
+    string tokenSymbol;
 
     struct Gift {
         uint256 tokenId;
@@ -55,12 +54,12 @@ contract WhiteWhale is Initializable, ERC721, IERC721Receiver {
 
     constructor() ERC721("WhiteWhale", "WW") {}
 
-    function initialize(string memory name_, string memory symbol_)
+    function initialize(string memory tokenName_, string memory tokenSymbol_)
         public
         initializer
     {
-        name = name_;
-        symbol = symbol_;
+        tokenName = tokenName_;
+        tokenSymbol = tokenSymbol_;
     }
 
     // deposit
