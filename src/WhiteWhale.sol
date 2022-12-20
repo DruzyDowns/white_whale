@@ -54,6 +54,20 @@ contract WhiteWhale is ERC721, IERC721Receiver {
         return IERC721Receiver.onERC721Received.selector;
     }
 
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 firstTokenId,
+        uint256 batchSize
+    ) internal virtual override {
+        require(
+            gameState == GameState.COMPLETED,
+            "Tokens are locked until game is over"
+        );
+
+        super._beforeTokenTransfer(from, to, firstTokenId, batchSize);
+    }
+
     // start game
     function start() public {
         require(gameState == GameState.NOT_STARTED, "Game already started");
@@ -83,7 +97,7 @@ contract WhiteWhale is ERC721, IERC721Receiver {
         );
     }
 
-    // unwrapGift
+    // claimGift
     function claimGift(uint256 tokenId, uint256 targetGiftIndex) public {
         require(gameState == GameState.IN_PROGRESS, "Game is not in progress");
         require(claimedGifts[tokenId] != 0, "Already unwrapped gift");
