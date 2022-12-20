@@ -8,7 +8,7 @@ import "openzeppelin-contracts/token/ERC721/IERC721Receiver.sol";
 import "solady/utils/LibBitmap.sol";
 
 contract WhiteWhale is ERC721, IERC721Receiver {
-    struct Token {
+    struct Gift {
         uint256 tokenId;
         address collection;
         address depositor;
@@ -16,13 +16,13 @@ contract WhiteWhale is ERC721, IERC721Receiver {
     }
 
     // the pool of gifts that have been deposited
-    Token[] giftPool;
+    Gift[] gifts;
 
     // Bitmap from giftPoolIndex to unwrapped status
-    LibBitmap.Bitmap isUnwrapped;
+    LibBitmap.Bitmap isClaimed;
 
     // maps tokenId to giftPoolIndex + 1
-    mapping(uint256 => uint256) unwrappedGifts;
+    mapping(uint256 => uint256) claimedGifts;
 
     uint256 roundCounter;
     uint256 stealCounter;
@@ -37,10 +37,6 @@ contract WhiteWhale is ERC721, IERC721Receiver {
 
     constructor() ERC721("WhiteWhale", "WW") {}
 
-    function _pseudoRandom(uint256 max) internal view returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(block.difficulty))) % max;
-    }
-
     // deposit
     function onERC721Received(
         address,
@@ -51,9 +47,9 @@ contract WhiteWhale is ERC721, IERC721Receiver {
         require(gameState == GameState.NOT_STARTED, "Game has already started");
         require(balanceOf(from) == 0, "Already deposited gift");
 
-        giftPool.push(Token(tokenId, msg.sender, from, 0));
+        gifts.push(Gift(tokenId, msg.sender, from, 0));
 
-        _safeMint(from, giftPool.length);
+        _safeMint(from, gifts.length);
 
         return IERC721Receiver.onERC721Received.selector;
     }
@@ -67,7 +63,7 @@ contract WhiteWhale is ERC721, IERC721Receiver {
     // end game
     function end() public {
         require(gameState == GameState.IN_PROGRESS, "Game is not in progress");
-        require(roundCounter == giftPool.length, "Game has not been completed");
+        require(roundCounter == gifts.length, "Game has not been completed");
 
         gameState = GameState.COMPLETED;
     }
@@ -76,9 +72,9 @@ contract WhiteWhale is ERC721, IERC721Receiver {
     function withdraw(uint256 tokenId) external {
         require(gameState == GameState.COMPLETED, "Game is not finished");
 
-        uint256 giftIndex = unwrappedGifts[tokenId] - 1;
+        uint256 giftIndex = claimedGifts[tokenId] - 1;
 
-        Token memory gift = giftPool[giftIndex];
+        Gift memory gift = gifts[giftIndex];
 
         IERC721(gift.collection).safeTransferFrom(
             address(this),
@@ -88,25 +84,18 @@ contract WhiteWhale is ERC721, IERC721Receiver {
     }
 
     // unwrapGift
-    function unwrapGift(uint256 tokenId) public {
+    function claimGift(uint256 tokenId, uint256 targetGiftIndex) public {
         require(gameState == GameState.IN_PROGRESS, "Game is not in progress");
-        require(unwrappedGifts[tokenId] != 0, "Already unwrapped gift");
+        require(claimedGifts[tokenId] != 0, "Already unwrapped gift");
         require(ownerOf(tokenId) == msg.sender, "Not your turn");
         require(tokenId == roundCounter, "Not your turn");
+        require(
+            !LibBitmap.get(isClaimed, targetGiftIndex),
+            "Gift has already been claimed"
+        );
 
-        uint256 pseudoRandomIndex = _pseudoRandom(giftPool.length);
-
-        for (uint256 i = 0; i < giftPool.length; i++) {
-            uint256 currentIndex = (pseudoRandomIndex + i) % giftPool.length;
-            bool isIndexUnwrapped = LibBitmap.get(isUnwrapped, currentIndex);
-
-            if (
-                isIndexUnwrapped &&
-                giftPool[currentIndex].depositor != msg.sender
-            ) {
-                unwrappedGifts[tokenId] = currentIndex + 1;
-            }
-        }
+        claimedGifts[tokenId] = targetGiftIndex + 1;
+        LibBitmap.set(isClaimed, targetGiftIndex);
 
         stealCounter = 0;
         roundCounter += 1;
@@ -115,7 +104,7 @@ contract WhiteWhale is ERC721, IERC721Receiver {
     // stealGift
     function stealGift(uint256 tokenId, uint256 targetTokenId) public {
         require(gameState == GameState.IN_PROGRESS, "Game is not in progress");
-        require(unwrappedGifts[tokenId] != 0, "Already unwrapped gift");
+        require(claimedGifts[tokenId] != 0, "Already unwrapped gift");
         require(
             stealCounter < 3,
             "Cannot steal more than three times in a row"
@@ -124,21 +113,21 @@ contract WhiteWhale is ERC721, IERC721Receiver {
         address giftHolder = ownerOf(targetTokenId);
 
         require(giftHolder != msg.sender, "Cannot steal gift from yourself");
-        require(unwrappedGifts[tokenId] != 0, "No gift to steal");
+        require(claimedGifts[tokenId] != 0, "No gift to steal");
         require(
-            giftPool[unwrappedGifts[tokenId] - 1].stealCounter < 3,
+            gifts[claimedGifts[tokenId] - 1].stealCounter < 3,
             "Gift cannot be stolen more than three times"
         );
         require(
-            giftPool[unwrappedGifts[tokenId] - 1].depositor != msg.sender,
+            gifts[claimedGifts[tokenId] - 1].depositor != msg.sender,
             "Cannot steal your own gift"
         );
         require(ownerOf(tokenId) == msg.sender, "Not your turn");
         require(tokenId == roundCounter, "Not your turn");
 
-        unwrappedGifts[tokenId] = unwrappedGifts[targetTokenId];
-        delete unwrappedGifts[targetTokenId];
-        giftPool[unwrappedGifts[targetTokenId] - 1].stealCounter += 1;
+        claimedGifts[tokenId] = claimedGifts[targetTokenId];
+        delete claimedGifts[targetTokenId];
+        gifts[claimedGifts[targetTokenId] - 1].stealCounter += 1;
 
         stealCounter += 1;
         roundCounter = targetTokenId;
