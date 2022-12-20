@@ -35,6 +35,17 @@ contract WhiteWhale is ERC721, IERC721Receiver {
 
     GameState gameState;
 
+    event GameStarted();
+    event GameEnded();
+    event GiftDeposited(address depositor, address collection, uint256 tokenId);
+    event GiftClaimed(address claimer, uint256 giftIndex);
+    event GiftStolen(address stealer, address victim, uint256 giftIndex);
+    event GiftWithdrawn(
+        address withdrawer,
+        address collection,
+        uint256 tokenId
+    );
+
     constructor() ERC721("WhiteWhale", "WW") {}
 
     // deposit
@@ -50,6 +61,8 @@ contract WhiteWhale is ERC721, IERC721Receiver {
         gifts.push(Gift(tokenId, msg.sender, from, 0));
 
         _safeMint(from, gifts.length);
+
+        emit GiftDeposited(from, msg.sender, tokenId);
 
         return IERC721Receiver.onERC721Received.selector;
     }
@@ -72,6 +85,8 @@ contract WhiteWhale is ERC721, IERC721Receiver {
     function start() public {
         require(gameState == GameState.NOT_STARTED, "Game already started");
         gameState = GameState.IN_PROGRESS;
+
+        emit GameStarted();
     }
 
     // end game
@@ -80,6 +95,7 @@ contract WhiteWhale is ERC721, IERC721Receiver {
         require(roundCounter == gifts.length, "Game has not been completed");
 
         gameState = GameState.COMPLETED;
+        emit GameEnded();
     }
 
     // withdraw token
@@ -95,6 +111,8 @@ contract WhiteWhale is ERC721, IERC721Receiver {
             ownerOf(tokenId),
             gift.tokenId
         );
+
+        emit GiftWithdrawn(ownerOf(tokenId), gift.collection, gift.tokenId);
     }
 
     function hasClaimedGift(uint256 tokenId) public view returns (bool) {
@@ -125,6 +143,8 @@ contract WhiteWhale is ERC721, IERC721Receiver {
 
         stealCounter = 0;
         roundCounter += 1;
+
+        emit GiftClaimed(msg.sender, targetGiftIndex);
     }
 
     // stealGift
@@ -152,11 +172,15 @@ contract WhiteWhale is ERC721, IERC721Receiver {
         require(ownerOf(tokenId) == msg.sender, "Not your turn");
         require(tokenId == roundCounter, "Not your turn");
 
-        claimedGifts[tokenId] = claimedGifts[targetTokenId];
+        uint256 giftIndex = getGiftIndex(targetTokenId);
+        setGiftIndex(tokenId, giftIndex);
         delete claimedGifts[targetTokenId];
-        gifts[getGiftIndex(tokenId)].stealCounter += 1;
+
+        gifts[giftIndex].stealCounter += 1;
 
         stealCounter += 1;
         roundCounter = targetTokenId;
+
+        emit GiftStolen(msg.sender, giftHolder, giftIndex);
     }
 }
