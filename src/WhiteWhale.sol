@@ -6,10 +6,15 @@ import "forge-std/Script.sol";
 import "openzeppelin-contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 import "openzeppelin-contracts-upgradeable/token/ERC721/IERC721ReceiverUpgradeable.sol";
 import "openzeppelin-contracts-upgradeable/token/ERC721/IERC721Upgradeable.sol";
+import "openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import "solady/utils/LibBitmap.sol";
 
-contract WhiteWhale is ERC721Upgradeable, IERC721ReceiverUpgradeable {
+contract WhiteWhale is
+    ERC721Upgradeable,
+    OwnableUpgradeable,
+    IERC721ReceiverUpgradeable
+{
     struct Gift {
         uint256 tokenId;
         address collection;
@@ -33,7 +38,8 @@ contract WhiteWhale is ERC721Upgradeable, IERC721ReceiverUpgradeable {
     enum GameState {
         NOT_STARTED,
         IN_PROGRESS,
-        COMPLETED
+        COMPLETED,
+        BORKED
     }
 
     GameState public gameState;
@@ -49,11 +55,13 @@ contract WhiteWhale is ERC721Upgradeable, IERC721ReceiverUpgradeable {
         uint256 tokenId
     );
 
-    function initialize(string memory name, string memory symbol)
-        public
-        initializer
-    {
+    function initialize(
+        string memory name,
+        string memory symbol,
+        address owner
+    ) public initializer {
         __ERC721_init(name, symbol);
+        _transferOwnership(owner);
     }
 
     // deposit
@@ -90,7 +98,7 @@ contract WhiteWhale is ERC721Upgradeable, IERC721ReceiverUpgradeable {
     }
 
     // start game
-    function start() public {
+    function start() public onlyOwner {
         require(gameState == GameState.NOT_STARTED, "Game already started");
 
         currentTurn = 1;
@@ -100,12 +108,20 @@ contract WhiteWhale is ERC721Upgradeable, IERC721ReceiverUpgradeable {
     }
 
     // end game
-    function end() public {
+    function end() public onlyOwner {
         require(gameState == GameState.IN_PROGRESS, "Game is not in progress");
         require(currentTurn == gifts.length + 1, "Game has not been completed");
 
         gameState = GameState.COMPLETED;
         emit GameEnded();
+    }
+
+    function bork() public onlyOwner {
+        gameState = GameState.COMPLETED;
+
+        for (uint256 i = 0; i < gifts.length; i++) {
+            setGiftIndex(i + 1, i);
+        }
     }
 
     // withdraw token

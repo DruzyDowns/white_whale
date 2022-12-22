@@ -19,7 +19,7 @@ contract WhiteWhaleFactory {
     {
         address clone = Clones.clone(whiteWhale);
 
-        WhiteWhale(clone).initialize(name, symbol);
+        WhiteWhale(clone).initialize(name, symbol, msg.sender);
 
         emit GameDeployed(clone);
 
