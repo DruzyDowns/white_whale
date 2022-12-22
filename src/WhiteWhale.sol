@@ -34,9 +34,13 @@ contract WhiteWhale is
     // maps tokenId to giftPoolIndex + 1
     mapping(uint256 => uint256) public claimedGifts;
 
-    uint256 public currentTurn;
-    uint256 public currentSteal;
-    uint256 public stealCounter;
+    struct TurnState {
+        uint120 currentTurn;
+        uint120 currentSteal;
+        uint8 stealCounter;
+    }
+
+    TurnState public turnState;
 
     enum GameState {
         NOT_STARTED,
@@ -105,10 +109,12 @@ contract WhiteWhale is
         uint256 firstTokenId,
         uint256 batchSize
     ) internal virtual override {
-        require(
-            gameState != GameState.IN_PROGRESS,
-            "Tokens are locked until game is over"
-        );
+        if (from != address(0)) {
+            require(
+                gameState == GameState.COMPLETED,
+                "Tokens are locked until game is over"
+            );
+        }
 
         super._beforeTokenTransfer(from, to, firstTokenId, batchSize);
     }
@@ -117,7 +123,7 @@ contract WhiteWhale is
     function start() public onlyOwner {
         require(gameState == GameState.NOT_STARTED, "Game already started");
 
-        currentTurn = 1;
+        turnState.currentTurn = 1;
         gameState = GameState.IN_PROGRESS;
 
         emit GameStarted();
@@ -126,7 +132,10 @@ contract WhiteWhale is
     // end game
     function end() public onlyOwner {
         require(gameState == GameState.IN_PROGRESS, "Game is not in progress");
-        require(currentTurn == gifts.length + 1, "Game has not been completed");
+        require(
+            turnState.currentTurn == gifts.length + 1,
+            "Game has not been completed"
+        );
 
         gameState = GameState.COMPLETED;
         emit GameEnded();
@@ -158,11 +167,11 @@ contract WhiteWhale is
     }
 
     function getCurrentTurn() public view returns (uint256 tokenId) {
-        if (currentSteal > 0) {
-            return currentSteal;
+        if (turnState.currentSteal > 0) {
+            return turnState.currentSteal;
         }
 
-        return currentTurn;
+        return turnState.currentTurn;
     }
 
     function getAllGifts() public view returns (Gift[] memory) {
@@ -221,9 +230,7 @@ contract WhiteWhale is
         setGiftIndex(tokenId, targetGiftIndex);
         LibBitmap.set(isClaimed, targetGiftIndex);
 
-        stealCounter = 0;
-        currentSteal = 0;
-        currentTurn += 1;
+        turnState = TurnState(turnState.currentTurn + 1, 0, 0);
 
         emit GiftClaimed(msg.sender, targetGiftIndex);
     }
@@ -233,7 +240,7 @@ contract WhiteWhale is
         require(gameState == GameState.IN_PROGRESS, "Game is not in progress");
         require(!hasClaimedGift(tokenId), "Already unwrapped gift");
         require(
-            stealCounter < 3,
+            turnState.stealCounter < 3,
             "Cannot steal more than three times in a row"
         );
 
@@ -259,8 +266,11 @@ contract WhiteWhale is
 
         gifts[giftIndex].stealCounter += 1;
 
-        currentSteal = targetTokenId;
-        stealCounter += 1;
+        turnState = TurnState(
+            turnState.currentTurn,
+            uint120(targetTokenId),
+            turnState.stealCounter + 1
+        );
 
         emit GiftStolen(msg.sender, giftHolder, giftIndex);
     }
