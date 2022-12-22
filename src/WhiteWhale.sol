@@ -7,6 +7,7 @@ import "openzeppelin-contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 import "openzeppelin-contracts-upgradeable/token/ERC721/IERC721ReceiverUpgradeable.sol";
 import "openzeppelin-contracts-upgradeable/token/ERC721/IERC721Upgradeable.sol";
 import "openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "openzeppelin-contracts-upgradeable/utils/StringsUpgradeable.sol";
 
 import "solady/utils/LibBitmap.sol";
 
@@ -69,7 +70,14 @@ contract WhiteWhale is
     }
 
     function _baseURI() internal view virtual override returns (string memory) {
-        return string(abi.encodePacked(baseURI, address(this), "/"));
+        return
+            string(
+                abi.encodePacked(
+                    baseURI,
+                    StringsUpgradeable.toHexString(address(this)),
+                    "/"
+                )
+            );
     }
 
     // deposit

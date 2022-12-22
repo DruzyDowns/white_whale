@@ -169,6 +169,21 @@ contract WhiteWhaleTests is Test {
         vm.prank(user1);
         WhiteWhale(clone).bork();
     }
+
+    function testTokenURI() public {
+        address user1 = vm.addr(1);
+
+        address clone = factory.deploy("White Whale Party", "WWP");
+        TokenCollection tokenCollection = new TokenCollection();
+
+        tokenCollection.mint(user1, 1);
+
+        vm.prank(user1);
+        tokenCollection.safeTransferFrom(user1, clone, 1);
+
+        string memory tokenURI = WhiteWhale(clone).tokenURI(1);
+        console.log(tokenURI);
+    }
 }
 
 contract TokenCollection is ERC721 {
