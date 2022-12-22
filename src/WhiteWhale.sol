@@ -195,6 +195,7 @@ contract WhiteWhale is
         view
         returns (Gift memory)
     {
+        if (!hasClaimedGift(tokenId)) return Gift(0, address(0), address(0), 0);
         uint256 giftIndex = getGiftIndex(tokenId);
         return gifts[giftIndex];
     }
