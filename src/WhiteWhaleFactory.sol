@@ -13,11 +13,16 @@ contract WhiteWhaleFactory {
         whiteWhale = _whiteWhale;
     }
 
-    function deploy(string memory name, string memory symbol) external {
+    function deploy(string memory name, string memory symbol)
+        external
+        returns (address)
+    {
         address clone = Clones.clone(whiteWhale);
 
         WhiteWhale(clone).initialize(name, symbol);
 
         emit GameDeployed(clone);
+
+        return clone;
     }
 }

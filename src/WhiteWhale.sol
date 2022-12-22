@@ -1,19 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "openzeppelin-contracts/token/ERC721/ERC721.sol";
-import "openzeppelin-contracts/token/ERC721/IERC721Receiver.sol";
-import "openzeppelin-contracts/proxy/utils/Initializable.sol";
+import "openzeppelin-contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "openzeppelin-contracts-upgradeable/token/ERC721/IERC721ReceiverUpgradeable.sol";
+import "openzeppelin-contracts-upgradeable/token/ERC721/IERC721Upgradeable.sol";
 
 import "solady/utils/LibBitmap.sol";
 
-contract WhiteWhale is Initializable, ERC721, IERC721Receiver {
-    // Token tokenName
-    string tokenName;
-
-    // Token tokenSymbol
-    string tokenSymbol;
-
+contract WhiteWhale is ERC721Upgradeable, IERC721ReceiverUpgradeable {
     struct Gift {
         uint256 tokenId;
         address collection;
@@ -52,14 +46,11 @@ contract WhiteWhale is Initializable, ERC721, IERC721Receiver {
         uint256 tokenId
     );
 
-    constructor() ERC721("WhiteWhale", "WW") {}
-
-    function initialize(string memory tokenName_, string memory tokenSymbol_)
+    function initialize(string memory name, string memory symbol)
         public
         initializer
     {
-        tokenName = tokenName_;
-        tokenSymbol = tokenSymbol_;
+        __ERC721_init(name, symbol);
     }
 
     // deposit
@@ -78,7 +69,7 @@ contract WhiteWhale is Initializable, ERC721, IERC721Receiver {
 
         emit GiftDeposited(from, msg.sender, tokenId);
 
-        return IERC721Receiver.onERC721Received.selector;
+        return IERC721ReceiverUpgradeable.onERC721Received.selector;
     }
 
     function _beforeTokenTransfer(
@@ -88,7 +79,7 @@ contract WhiteWhale is Initializable, ERC721, IERC721Receiver {
         uint256 batchSize
     ) internal virtual override {
         require(
-            gameState == GameState.COMPLETED,
+            gameState != GameState.IN_PROGRESS,
             "Tokens are locked until game is over"
         );
 
@@ -120,7 +111,7 @@ contract WhiteWhale is Initializable, ERC721, IERC721Receiver {
 
         Gift memory gift = gifts[giftIndex];
 
-        IERC721(gift.collection).safeTransferFrom(
+        IERC721Upgradeable(gift.collection).safeTransferFrom(
             address(this),
             ownerOf(tokenId),
             gift.tokenId
