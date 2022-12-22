@@ -15,6 +15,8 @@ contract WhiteWhale is
     OwnableUpgradeable,
     IERC721ReceiverUpgradeable
 {
+    string baseURI;
+
     struct Gift {
         uint256 tokenId;
         address collection;
@@ -58,10 +60,16 @@ contract WhiteWhale is
     function initialize(
         string memory name,
         string memory symbol,
+        string memory baseURI_,
         address owner
     ) public initializer {
         __ERC721_init(name, symbol);
         _transferOwnership(owner);
+        baseURI = baseURI_;
+    }
+
+    function _baseURI() internal view virtual override returns (string memory) {
+        return string(abi.encodePacked(baseURI, address(this), "/"));
     }
 
     // deposit
@@ -147,6 +155,14 @@ contract WhiteWhale is
         }
 
         return currentTurn;
+    }
+
+    function getAllGifts() public view returns (Gift[] memory) {
+        return gifts;
+    }
+
+    function getIsClaimedByIndex(uint256 giftIndex) public view returns (bool) {
+        return LibBitmap.get(isClaimed, giftIndex);
     }
 
     function getGiftByIndex(uint256 giftIndex)

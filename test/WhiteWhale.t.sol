@@ -13,7 +13,10 @@ contract WhiteWhaleTests is Test {
 
     function setUp() public {
         implementation = new WhiteWhale();
-        factory = new WhiteWhaleFactory(address(implementation));
+        factory = new WhiteWhaleFactory(
+            address(implementation),
+            "https://whitewhale.party/api/metadata/"
+        );
     }
 
     function testWhiteWhaleDeployment() public {
