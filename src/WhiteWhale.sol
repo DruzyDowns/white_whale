@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
+import "forge-std/Script.sol";
+
 import "openzeppelin-contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 import "openzeppelin-contracts-upgradeable/token/ERC721/IERC721ReceiverUpgradeable.sol";
 import "openzeppelin-contracts-upgradeable/token/ERC721/IERC721Upgradeable.sol";
@@ -16,16 +18,17 @@ contract WhiteWhale is ERC721Upgradeable, IERC721ReceiverUpgradeable {
     }
 
     // the pool of gifts that have been deposited
-    Gift[] gifts;
+    Gift[] public gifts;
 
     // Bitmap from giftPoolIndex to unwrapped status
     LibBitmap.Bitmap isClaimed;
 
     // maps tokenId to giftPoolIndex + 1
-    mapping(uint256 => uint256) claimedGifts;
+    mapping(uint256 => uint256) public claimedGifts;
 
-    uint256 roundCounter;
-    uint256 stealCounter;
+    uint256 public currentTurn;
+    uint256 public currentSteal;
+    uint256 public stealCounter;
 
     enum GameState {
         NOT_STARTED,
@@ -33,7 +36,7 @@ contract WhiteWhale is ERC721Upgradeable, IERC721ReceiverUpgradeable {
         COMPLETED
     }
 
-    GameState gameState;
+    GameState public gameState;
 
     event GameStarted();
     event GameEnded();
@@ -89,6 +92,8 @@ contract WhiteWhale is ERC721Upgradeable, IERC721ReceiverUpgradeable {
     // start game
     function start() public {
         require(gameState == GameState.NOT_STARTED, "Game already started");
+
+        currentTurn = 1;
         gameState = GameState.IN_PROGRESS;
 
         emit GameStarted();
@@ -97,7 +102,7 @@ contract WhiteWhale is ERC721Upgradeable, IERC721ReceiverUpgradeable {
     // end game
     function end() public {
         require(gameState == GameState.IN_PROGRESS, "Game is not in progress");
-        require(roundCounter == gifts.length, "Game has not been completed");
+        require(currentTurn == gifts.length + 1, "Game has not been completed");
 
         gameState = GameState.COMPLETED;
         emit GameEnded();
@@ -120,40 +125,71 @@ contract WhiteWhale is ERC721Upgradeable, IERC721ReceiverUpgradeable {
         emit GiftWithdrawn(ownerOf(tokenId), gift.collection, gift.tokenId);
     }
 
+    function getCurrentTurn() public view returns (uint256 tokenId) {
+        if (currentSteal > 0) {
+            return currentSteal;
+        }
+
+        return currentTurn;
+    }
+
+    function getGiftByIndex(uint256 giftIndex)
+        public
+        view
+        returns (Gift memory)
+    {
+        return gifts[giftIndex];
+    }
+
+    function getGiftByTokenId(uint256 tokenId)
+        public
+        view
+        returns (Gift memory)
+    {
+        uint256 giftIndex = getGiftIndex(tokenId);
+        return gifts[giftIndex];
+    }
+
     function hasClaimedGift(uint256 tokenId) public view returns (bool) {
         return claimedGifts[tokenId] != 0;
     }
 
-    function getGiftIndex(uint256 tokenId) public view returns (uint256) {
+    function getGiftIndex(uint256 tokenId) internal view returns (uint256) {
+        if (claimedGifts[tokenId] == 0) return 0;
         return claimedGifts[tokenId] - 1;
     }
 
-    function setGiftIndex(uint256 tokenId, uint256 giftIndex) public {
+    function setGiftIndex(uint256 tokenId, uint256 giftIndex) internal {
         claimedGifts[tokenId] = giftIndex + 1;
     }
 
     // claimGift
-    function claimGift(uint256 tokenId, uint256 targetGiftIndex) public {
+    function claimGift(uint256 tokenId, uint256 targetGiftIndex) external {
         require(gameState == GameState.IN_PROGRESS, "Game is not in progress");
         require(!hasClaimedGift(tokenId), "Already unwrapped gift");
-        require(ownerOf(tokenId) == msg.sender, "Not your turn");
-        require(tokenId == roundCounter, "Not your turn");
+        require(ownerOf(tokenId) == msg.sender, "Not your token");
+        require(tokenId == getCurrentTurn(), "Not your turn");
         require(
             !LibBitmap.get(isClaimed, targetGiftIndex),
             "Gift has already been claimed"
+        );
+        require(
+            getGiftByIndex(targetGiftIndex).depositor != msg.sender,
+            "Cannot claim your own gift"
         );
 
         setGiftIndex(tokenId, targetGiftIndex);
         LibBitmap.set(isClaimed, targetGiftIndex);
 
         stealCounter = 0;
-        roundCounter += 1;
+        currentSteal = 0;
+        currentTurn += 1;
 
         emit GiftClaimed(msg.sender, targetGiftIndex);
     }
 
     // stealGift
-    function stealGift(uint256 tokenId, uint256 targetTokenId) public {
+    function stealGift(uint256 tokenId, uint256 targetTokenId) external {
         require(gameState == GameState.IN_PROGRESS, "Game is not in progress");
         require(!hasClaimedGift(tokenId), "Already unwrapped gift");
         require(
@@ -162,20 +198,20 @@ contract WhiteWhale is ERC721Upgradeable, IERC721ReceiverUpgradeable {
         );
 
         address giftHolder = ownerOf(targetTokenId);
-        uint256 currentGiftIndex = getGiftIndex(tokenId);
+        uint256 targetGiftIndex = getGiftIndex(targetTokenId);
 
         require(giftHolder != msg.sender, "Cannot steal gift from yourself");
         require(hasClaimedGift(targetTokenId), "No gift to steal");
         require(
-            gifts[currentGiftIndex].stealCounter < 3,
+            gifts[targetGiftIndex].stealCounter < 3,
             "Gift cannot be stolen more than three times"
         );
         require(
-            gifts[currentGiftIndex].depositor != msg.sender,
+            gifts[targetGiftIndex].depositor != msg.sender,
             "Cannot steal your own gift"
         );
         require(ownerOf(tokenId) == msg.sender, "Not your turn");
-        require(tokenId == roundCounter, "Not your turn");
+        require(tokenId == getCurrentTurn(), "Not your turn");
 
         uint256 giftIndex = getGiftIndex(targetTokenId);
         setGiftIndex(tokenId, giftIndex);
@@ -183,8 +219,8 @@ contract WhiteWhale is ERC721Upgradeable, IERC721ReceiverUpgradeable {
 
         gifts[giftIndex].stealCounter += 1;
 
+        currentSteal = targetTokenId;
         stealCounter += 1;
-        roundCounter = targetTokenId;
 
         emit GiftStolen(msg.sender, giftHolder, giftIndex);
     }
